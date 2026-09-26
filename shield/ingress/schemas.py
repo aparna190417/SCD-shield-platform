@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +13,7 @@ class Incident(BaseModel):
     timestamp: datetime
     node_id: str = Field(min_length=1)
     incident_type: str = Field(min_length=1)
-    severity: str = Field(min_length=1)
+    severity: Literal["low", "medium", "high", "critical"]
     description: str = Field(min_length=1)
 
     telemetry: dict[str, Any] = Field(default_factory=dict)
