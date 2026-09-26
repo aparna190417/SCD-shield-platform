@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from shield.ingress.output_parser import DiagnosticOutputParser
 from shield.ingress.schemas import DiagnosticResult

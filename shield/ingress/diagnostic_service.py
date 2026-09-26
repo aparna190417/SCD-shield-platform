@@ -31,9 +31,7 @@ class DiagnosticService:
     ) -> DiagnosticResult:
         """Run the complete diagnostic pipeline."""
 
-        bundle = self.prompt_registry.load_prompt_bundle(
-            prompt_version
-        )
+        bundle = self.prompt_registry.load_prompt_bundle(prompt_version)
 
         rendered = self.prompt_renderer.render(
             bundle,

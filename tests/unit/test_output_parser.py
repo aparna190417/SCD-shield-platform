@@ -2,7 +2,6 @@ import pytest
 
 from shield.ingress.output_parser import DiagnosticOutputParser
 
-
 VALID_OUTPUT = """
 {
     "incident_id": "INC-001",

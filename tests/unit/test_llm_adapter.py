@@ -14,9 +14,7 @@ def test_fake_llm_adapter_returns_response():
 
     adapter = FakeLLMAdapter('{"status": "ok"}')
 
-    response = adapter.generate(
-        LLMRequest(prompt=bundle)
-    )
+    response = adapter.generate(LLMRequest(prompt=bundle))
 
     assert response == '{"status": "ok"}'
 

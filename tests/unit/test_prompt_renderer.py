@@ -13,7 +13,9 @@ def test_render_injects_all_runtime_variables():
         incident="INC-001: NVLink degradation detected",
         telemetry="link_errors=42",
         hardware_context="GPU-A100 node-a",
-        retrieved_evidence="NVLink documentation indicates link errors can indicate degradation",
+        retrieved_evidence=(
+            "NVLink documentation indicates link errors can indicate degradation"
+        ),
         incident_history="Previous similar incident occurred on node-b",
     )
 

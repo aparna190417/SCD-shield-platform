@@ -44,4 +44,5 @@ class PromptRenderer:
         return RenderedPromptBundle(
             system=bundle.system,
             developer=bundle.developer,
-            user=bundle.user.format(**variables),)
+            user=bundle.user.format(**variables),
+        )

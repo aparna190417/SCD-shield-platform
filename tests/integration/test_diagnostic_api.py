@@ -49,7 +49,7 @@ def mock_diagnostic_service() -> MagicMock:
 
 
 @pytest.fixture
-def client(mock_diagnostic_service: MagicMock) -> Generator[TestClient, None, None]:
+def client(mock_diagnostic_service: MagicMock) -> Generator[TestClient]:
     """TestClient fixture with dependency overrides and lifespan management."""
     app.dependency_overrides[get_diagnostic_service] = lambda: mock_diagnostic_service
     with TestClient(app) as test_client:
@@ -89,7 +89,10 @@ class TestDiagnoseEndpoint:
             ({"confidence": 1.5}, status.HTTP_422_UNPROCESSABLE_CONTENT),
             ({"confidence": -0.1}, status.HTTP_422_UNPROCESSABLE_CONTENT),
             ({"unexpected_field": "disallowed"}, status.HTTP_422_UNPROCESSABLE_CONTENT),
-            ({"severity": "invalid_severity_level"}, status.HTTP_422_UNPROCESSABLE_CONTENT),
+            (
+                {"severity": "invalid_severity_level"},
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ),
             ({"incident_id": ""}, status.HTTP_422_UNPROCESSABLE_CONTENT),
         ],
     )

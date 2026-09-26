@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from shield.ingress.diagnostic_service import DiagnosticService
 from shield.ingress.llm_adapter import FakeLLMAdapter
 from shield.ingress.schemas import Incident
-
 
 VALID_OUTPUT = """
 {
@@ -30,7 +29,7 @@ VALID_OUTPUT = """
 def make_incident() -> Incident:
     return Incident(
         incident_id="INC-001",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         node_id="node-a",
         incident_type="hardware",
         severity="high",

@@ -16,20 +16,14 @@ class PromptRegistry:
 
     def __init__(self, prompts_root: Path | None = None) -> None:
         if prompts_root is None:
-            prompts_root = (
-                Path(__file__).resolve().parents[2] / "prompts"
-            )
+            prompts_root = Path(__file__).resolve().parents[2] / "prompts"
 
         self.prompts_root = prompts_root
 
     def load_diagnostic_prompt(self, version: str) -> str:
         """Backward-compatible loading of the legacy diagnostic prompt."""
 
-        prompt_path = (
-            self.prompts_root
-            / version
-            / "diagnostic_system.md"
-        )
+        prompt_path = self.prompts_root / version / "diagnostic_system.md"
 
         if not prompt_path.exists():
             raise FileNotFoundError(
@@ -44,9 +38,7 @@ class PromptRegistry:
         version_dir = self.prompts_root / version
 
         if not version_dir.exists():
-            raise FileNotFoundError(
-                f"Prompt version not found: {version}"
-            )
+            raise FileNotFoundError(f"Prompt version not found: {version}")
 
         messages = {}
 

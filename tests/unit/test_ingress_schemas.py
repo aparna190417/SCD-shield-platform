@@ -41,4 +41,5 @@ def test_unexpected_incident_field_is_rejected():
             incident_type="nvlink_degradation",
             severity="high",
             description="NVLink error rate increased",
-            unexpected_field="should_fail",)
+            unexpected_field="should_fail",
+        )

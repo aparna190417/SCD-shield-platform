@@ -15,13 +15,9 @@ class DiagnosticOutputParser:
         try:
             payload: Any = json.loads(raw_output)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                "Diagnostic output is not valid JSON."
-            ) from exc
+            raise ValueError("Diagnostic output is not valid JSON.") from exc
 
         try:
             return DiagnosticResult.model_validate(payload)
         except ValidationError as exc:
-            raise ValueError(
-                "Diagnostic output failed schema validation."
-            ) from exc
+            raise ValueError("Diagnostic output failed schema validation.") from exc
