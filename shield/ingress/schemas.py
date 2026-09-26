@@ -21,14 +21,21 @@ class Incident(BaseModel):
 
 
 class DiagnosticResult(BaseModel):
-    """Structured result produced by the diagnostic pipeline."""
+    """Validated structured diagnostic result."""
 
     model_config = ConfigDict(extra="forbid")
 
-    incident_id: str
-    root_cause: str
-    failure_family: str
+    incident_id: str = Field(min_length=1)
+    failure_family: str = Field(min_length=1)
+    affected_entity: str = Field(min_length=1)
+
+    primary_hypothesis: str = Field(min_length=1)
+    alternative_hypotheses: list[str] = Field(default_factory=list)
+
+    supporting_evidence: list[str] = Field(default_factory=list)
+    contradicting_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+
     confidence: float = Field(ge=0.0, le=1.0)
-    recommended_action: str
-    evidence: list[str] = Field(default_factory=list)
-    reasoning_summary: str = ""
+
+    recommended_action: str = Field(min_length=1)

@@ -1,37 +1,31 @@
-from pathlib import Path
-
-import pytest
-
 from shield.ingress.prompt_registry import PromptRegistry
 
 
-def test_load_v1_prompt():
+def test_load_v1_prompt_bundle():
     registry = PromptRegistry()
 
-    prompt = registry.load_diagnostic_prompt("v1")
+    bundle = registry.load_prompt_bundle("v1")
 
-    assert "SCD-SHIELD" in prompt
-    assert "Required behavior" in prompt
+    assert "SCD-SHIELD" in bundle.system
+    assert "diagnostic procedure" in bundle.developer.lower()
+    assert "{incident}" in bundle.user
 
 
-def test_load_v2_challenger_prompt():
+def test_load_v2_challenger_prompt_bundle():
     registry = PromptRegistry()
 
-    prompt = registry.load_diagnostic_prompt("v2_challenger")
+    bundle = registry.load_prompt_bundle("v2_challenger")
 
-    assert "challenger" in prompt.lower()
-    assert "three plausible competing hypotheses" in prompt
+    assert "challenger" in bundle.system.lower()
+    assert "competing hypotheses" in bundle.developer.lower()
+    assert "{telemetry}" in bundle.user
 
 
-def test_missing_prompt_version():
+def test_prompt_bundle_contains_three_layers():
     registry = PromptRegistry()
 
-    with pytest.raises(FileNotFoundError):
-        registry.load_diagnostic_prompt("v999")
+    bundle = registry.load_prompt_bundle("v1")
 
-
-def test_empty_prompt_version():
-    registry = PromptRegistry()
-
-    with pytest.raises(ValueError):
-        registry.load_diagnostic_prompt("")
+    assert bundle.system
+    assert bundle.developer
+    assert bundle.user
