@@ -51,18 +51,27 @@ def mock_diagnostic_service() -> MagicMock:
 @pytest.fixture
 def client(mock_diagnostic_service: MagicMock) -> Generator[TestClient]:
     """TestClient fixture with dependency overrides and lifespan management."""
-    app.dependency_overrides[get_diagnostic_service] = lambda: mock_diagnostic_service
+    app.dependency_overrides[get_diagnostic_service] = (
+        lambda: mock_diagnostic_service
+    )
+
     with TestClient(app) as test_client:
         yield test_client
+
     app.dependency_overrides.clear()
 
 
 class TestSystemEndpoints:
-    def test_health_check_returns_ok_and_metadata(self, client: TestClient) -> None:
+    def test_health_check_returns_ok_and_metadata(
+        self,
+        client: TestClient,
+    ) -> None:
         response = client.get("/health")
 
         assert response.status_code == status.HTTP_200_OK
+
         data = response.json()
+
         assert data["status"] == "healthy"
         assert "version" in data
 
@@ -76,24 +85,39 @@ class TestDiagnoseEndpoint:
         response = client.post("/diagnose", json=VALID_INCIDENT)
 
         assert response.status_code == status.HTTP_200_OK
+
         body = response.json()
+
         assert body["incident_id"] == "INC-001"
         assert body["failure_family"] == "interconnect"
         assert body["affected_entity"] == "node-a"
         assert body["confidence"] == 0.82
+
         mock_diagnostic_service.diagnose.assert_called_once()
 
     @pytest.mark.parametrize(
         ("mutation", "expected_status"),
         [
-            ({"confidence": 1.5}, status.HTTP_422_UNPROCESSABLE_CONTENT),
-            ({"confidence": -0.1}, status.HTTP_422_UNPROCESSABLE_CONTENT),
-            ({"unexpected_field": "disallowed"}, status.HTTP_422_UNPROCESSABLE_CONTENT),
+            (
+                {"confidence": 1.5},
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ),
+            (
+                {"confidence": -0.1},
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ),
+            (
+                {"unexpected_field": "disallowed"},
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ),
             (
                 {"severity": "invalid_severity_level"},
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
             ),
-            ({"incident_id": ""}, status.HTTP_422_UNPROCESSABLE_CONTENT),
+            (
+                {"incident_id": ""},
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ),
         ],
     )
     def test_diagnose_input_validation_errors(
@@ -103,6 +127,7 @@ class TestDiagnoseEndpoint:
         expected_status: int,
     ) -> None:
         payload = {**VALID_INCIDENT, **mutation}
+
         response = client.post("/diagnose", json=payload)
 
         assert response.status_code == expected_status
@@ -112,9 +137,34 @@ class TestDiagnoseEndpoint:
         client: TestClient,
         mock_diagnostic_service: MagicMock,
     ) -> None:
-        mock_diagnostic_service.diagnose.side_effect = ValueError("Telemetry corrupted")
+        mock_diagnostic_service.diagnose.side_effect = ValueError(
+            "Telemetry corrupted"
+        )
 
         response = client.post("/diagnose", json=VALID_INCIDENT)
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
-        assert response.json()["detail"]["error"] == "DiagnosticValidationError"
+
+        body = response.json()
+
+        assert body["detail"]["error"] == "DiagnosticValidationError"
+        assert body["detail"]["message"] == "Telemetry corrupted"
+
+    def test_diagnose_handles_unexpected_service_error(
+        self,
+        client: TestClient,
+        mock_diagnostic_service: MagicMock,
+    ) -> None:
+        mock_diagnostic_service.diagnose.side_effect = RuntimeError(
+            "Database connection failed"
+        )
+
+        response = client.post("/diagnose", json=VALID_INCIDENT)
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        body = response.json()
+
+        assert body["detail"]["error"] == "DiagnosticExecutionError"
+        assert body["detail"]["message"] == "Failed to evaluate incident."
+        assert "Database connection failed" not in response.text
