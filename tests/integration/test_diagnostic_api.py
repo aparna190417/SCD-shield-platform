@@ -116,5 +116,5 @@ class TestDiagnoseEndpoint:
 
         response = client.post("/diagnose", json=VALID_INCIDENT)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         assert response.json()["detail"]["error"] == "DiagnosticValidationError"

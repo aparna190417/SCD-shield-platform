@@ -89,3 +89,36 @@ def test_diagnostic_service_repairs_invalid_first_response():
     assert result.incident_id == "INC-001"
     assert result.confidence == 0.82
     assert len(adapter.requests) == 2
+
+def test_diagnostic_service_injects_retrieved_evidence() -> None:
+    adapter = FakeLLMAdapter(VALID_OUTPUT)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    service.diagnose(make_incident())
+
+    assert len(adapter.requests) == 1
+
+    rendered_prompt = adapter.requests[0].prompt
+
+    assert "[EV-001]" in rendered_prompt.user
+    assert "increased link errors" in rendered_prompt.user
+
+def test_diagnostic_service_uses_provided_retrieved_evidence() -> None:
+    adapter = FakeLLMAdapter(VALID_OUTPUT)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    service.diagnose(
+        make_incident(),
+        retrieved_evidence="MANUALLY PROVIDED EVIDENCE",
+    )
+
+    rendered_prompt = adapter.requests[0].prompt
+
+    assert "MANUALLY PROVIDED EVIDENCE" in rendered_prompt.user
+    assert "[EV-001]" not in rendered_prompt.user    
