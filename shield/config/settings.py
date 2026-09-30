@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
 
     max_repair_attempts: int = 2
+    log_level: str = "INFO"
 
 
 @lru_cache

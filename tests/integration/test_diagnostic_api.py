@@ -1,6 +1,6 @@
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import status
@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from services.api.app import app, get_diagnostic_service
 from shield.ingress.diagnostic_service import DiagnosticService
-from shield.ingress.schemas import DiagnosticResult
+from shield.ingress.schemas import DiagnosticResult, Incident
 
 VALID_INCIDENT: dict[str, Any] = {
     "incident_id": "INC-001",
@@ -77,6 +77,23 @@ class TestSystemEndpoints:
         assert data["status"] == "healthy"
         assert data["service"] == "scd-shield"
         assert data["version"] == "1.0.0"
+
+    @patch("services.api.app.configure_logging_from_settings")
+    def test_create_app_configures_logging_from_settings(
+        self,
+        mock_configure_logging: MagicMock,
+    ) -> None:
+        from services.api.app import create_app
+        from shield.config.settings import Settings
+
+        settings = Settings(log_level="DEBUG")
+
+        create_app(settings)
+
+        mock_configure_logging.assert_called_once()
+        configured_settings = mock_configure_logging.call_args.args[0]
+
+        assert configured_settings.log_level == "DEBUG"
 
 
 class TestDiagnoseEndpoint:
@@ -215,3 +232,77 @@ class TestDiagnoseEndpoint:
         assert detail["error"] == "DiagnosticExecutionError"
         assert detail["message"] == "Failed to evaluate incident."
         assert detail["incident_id"] == "INC-001"
+
+    def test_diagnose_value_error_returns_structured_detail(
+        self,
+        client: TestClient,
+        mock_diagnostic_service: MagicMock,
+    ) -> None:
+        mock_diagnostic_service.diagnose.side_effect = ValueError(
+            "Telemetry corrupted"
+        )
+
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
+
+        assert response.status_code == (
+            status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+
+        detail = response.json()["detail"]
+
+        assert set(detail) == {
+            "error",
+            "message",
+            "incident_id",
+        }
+
+        assert detail["error"] == "DiagnosticValidationError"
+        assert detail["message"] == "Telemetry corrupted"
+        assert detail["incident_id"] == "INC-001"
+
+    def test_diagnose_internal_error_does_not_expose_exception(
+        self,
+        client: TestClient,
+        mock_diagnostic_service: MagicMock,
+    ) -> None:
+        mock_diagnostic_service.diagnose.side_effect = RuntimeError(
+            "Database password leaked"
+        )
+
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        detail = response.json()["detail"]
+
+        assert detail["error"] == "DiagnosticExecutionError"
+        assert detail["message"] == "Failed to evaluate incident."
+        assert detail["incident_id"] == "INC-001"
+        assert "Database password leaked" not in response.text
+
+    def test_diagnose_service_receives_validated_incident(
+        self,
+        client: TestClient,
+        mock_diagnostic_service: MagicMock,
+    ) -> None:
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        mock_diagnostic_service.diagnose.assert_called_once()
+
+        incident = mock_diagnostic_service.diagnose.call_args.args[0]
+
+        assert isinstance(incident, Incident)
+        assert incident.incident_id == "INC-001"
+        assert incident.node_id == "node-a"
+        assert incident.telemetry["link_errors"] == 42

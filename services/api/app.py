@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from shield.config.logging import configure_logging_from_settings
 from shield.config.settings import Settings, get_settings
 from shield.ingress.diagnostic_service import DiagnosticService
 from shield.ingress.llm_factory import create_llm_adapter
@@ -56,6 +57,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     if settings is not None:
         container = ServiceContainer(settings)
+
+    configure_logging_from_settings(container.settings)
 
     app = FastAPI(
         title="SCD-SHIELD API",
