@@ -321,3 +321,148 @@ def test_diagnostic_service_preserves_incident_context_in_prompt() -> None:
     assert "A100 GPU node" in prompt.user
     assert "NVLink documentation" in prompt.user
     assert "No previous matching incidents" in prompt.user
+
+def test_diagnostic_service_logs_start_and_completion(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter = FakeLLMAdapter(VALID_OUTPUT)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    with caplog.at_level("INFO"):
+        result = service.diagnose(
+            make_incident(),
+            retrieved_evidence="Known evidence",
+        )
+
+    assert result.incident_id == "INC-001"
+
+    messages = [record.message for record in caplog.records]
+
+    assert "Starting diagnostic" in messages
+    assert "Sending initial diagnostic request" in messages
+    assert "Diagnostic completed" in messages
+
+
+def test_diagnostic_service_logs_incident_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter = FakeLLMAdapter(VALID_OUTPUT)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    with caplog.at_level("INFO"):
+        service.diagnose(
+            make_incident(),
+            retrieved_evidence="Known evidence",
+        )
+
+    diagnostic_records = [
+        record
+        for record in caplog.records
+        if record.name == "shield.ingress.diagnostic_service"
+    ]
+
+    assert diagnostic_records
+    assert all(
+        getattr(record, "incident_id", None) == "INC-001"
+        for record in diagnostic_records
+    )
+
+
+def test_diagnostic_service_logs_evidence_retrieval(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter = FakeLLMAdapter(VALID_OUTPUT)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    with caplog.at_level("INFO"):
+        service.diagnose(make_incident())
+
+    messages = [record.message for record in caplog.records]
+
+    assert "Evidence retrieval completed" in messages
+
+    retrieval_record = next(
+        record
+        for record in caplog.records
+        if record.message == "Evidence retrieval completed"
+    )
+
+    assert retrieval_record.incident_id == "INC-001"
+    assert retrieval_record.evidence_count >= 0
+
+
+def test_diagnostic_service_logs_repair_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class SequenceLLMAdapter:
+        def __init__(self) -> None:
+            self.responses = [
+                "{invalid json}",
+                VALID_OUTPUT,
+            ]
+            self.requests: list[LLMRequest] = []
+
+        def generate(self, request: LLMRequest) -> str:
+            self.requests.append(request)
+            return self.responses.pop(0)
+
+    adapter = SequenceLLMAdapter()
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    with caplog.at_level("WARNING"):
+        result = service.diagnose(
+            make_incident(),
+            retrieved_evidence="Known evidence",
+        )
+
+    assert result.incident_id == "INC-001"
+
+    repair_records = [
+        record
+        for record in caplog.records
+        if record.message == "Repairing diagnostic response"
+    ]
+
+    assert len(repair_records) == 1
+    assert repair_records[0].incident_id == "INC-001"
+
+
+def test_diagnostic_service_does_not_log_raw_llm_output(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret_response = (
+        '{"incident_id":"INC-001",'
+        '"primary_hypothesis":"SECRET_MODEL_OUTPUT"}'
+    )
+
+    adapter = FakeLLMAdapter(secret_response)
+
+    service = DiagnosticService(
+        llm_adapter=adapter,
+    )
+
+    with caplog.at_level("DEBUG"):
+        try:
+            service.diagnose(
+                make_incident(),
+                retrieved_evidence="Known evidence",
+            )
+        except Exception:
+            pass
+
+    logged_text = caplog.text
+
+    assert secret_response not in logged_text
+    assert "SECRET_MODEL_OUTPUT" not in logged_text

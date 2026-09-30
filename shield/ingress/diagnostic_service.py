@@ -1,9 +1,13 @@
+import logging
+
 from shield.ingress.llm_adapter import LLMAdapter, LLMRequest
 from shield.ingress.prompt_registry import PromptRegistry
 from shield.ingress.prompt_renderer import PromptRenderer, RenderedPromptBundle
 from shield.ingress.repair import DiagnosticRepairEngine
 from shield.ingress.schemas import DiagnosticResult, Incident
 from shield.retrieval.retriever import EvidenceRetriever
+
+logger = logging.getLogger(__name__)
 
 
 class DiagnosticService:
@@ -34,12 +38,43 @@ class DiagnosticService:
     ) -> DiagnosticResult:
         """Run the complete diagnostic pipeline."""
 
+        logger.info(
+            "Starting diagnostic",
+            extra={
+                "incident_id": incident.incident_id,
+                "prompt_version": prompt_version,
+            },
+        )
+
         bundle = self.prompt_registry.load_prompt_bundle(prompt_version)
 
         if retrieved_evidence is None:
+            logger.debug(
+                "Retrieving evidence",
+                extra={
+                    "incident_id": incident.incident_id,
+                },
+            )
+
             retrieved_results = self.evidence_retriever.retrieve(incident)
+
             retrieved_evidence = self.evidence_retriever.format_results(
                 retrieved_results
+            )
+
+            logger.info(
+                "Evidence retrieval completed",
+                extra={
+                    "incident_id": incident.incident_id,
+                    "evidence_count": len(retrieved_results),
+                },
+            )
+        else:
+            logger.debug(
+                "Using provided retrieved evidence",
+                extra={
+                    "incident_id": incident.incident_id,
+                },
             )
 
         rendered = self.prompt_renderer.render(
@@ -53,9 +88,37 @@ class DiagnosticService:
 
         request = LLMRequest(prompt=rendered)
 
+        logger.info(
+            "Sending initial diagnostic request",
+            extra={
+                "incident_id": incident.incident_id,
+            },
+        )
+
         initial_output = self.llm_adapter.generate(request)
 
+        logger.debug(
+            "Initial diagnostic response received",
+            extra={
+                "incident_id": incident.incident_id,
+                "response_length": len(initial_output),
+            },
+        )
+
+        repair_used = False
+
         def repair_output(_: str) -> str:
+            nonlocal repair_used
+
+            repair_used = True
+
+            logger.warning(
+                "Repairing diagnostic response",
+                extra={
+                    "incident_id": incident.incident_id,
+                },
+            )
+
             repair_request = LLMRequest(
                 prompt=RenderedPromptBundle(
                     system=rendered.system,
@@ -64,12 +127,33 @@ class DiagnosticService:
                         + "\n\nRepair the previous output and return "
                         "only valid structured JSON."
                     ),
-                    user=rendered.user,))
+                    user=rendered.user,
+                )
+            )
 
-            return self.llm_adapter.generate(repair_request)
+            repaired_output = self.llm_adapter.generate(repair_request)
+
+            logger.debug(
+                "Repair response received",
+                extra={
+                    "incident_id": incident.incident_id,
+                    "response_length": len(repaired_output),
+                },
+            )
+
+            return repaired_output
 
         repaired = self.repair_engine.parse_with_repair(
             initial_output,
-            repair_output,)
+            repair_output,
+        )
+
+        logger.info(
+            "Diagnostic completed",
+            extra={
+                "incident_id": incident.incident_id,
+                "repair_used": repair_used,
+            },
+        )
 
         return repaired.result
