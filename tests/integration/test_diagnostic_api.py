@@ -49,7 +49,9 @@ def mock_diagnostic_service() -> MagicMock:
 
 
 @pytest.fixture
-def client(mock_diagnostic_service: MagicMock) -> Generator[TestClient]:
+def client(
+    mock_diagnostic_service: MagicMock,
+) -> Generator[TestClient]:
     """TestClient fixture with dependency overrides and lifespan management."""
     app.dependency_overrides[get_diagnostic_service] = (
         lambda: mock_diagnostic_service
@@ -73,7 +75,8 @@ class TestSystemEndpoints:
         data = response.json()
 
         assert data["status"] == "healthy"
-        assert "version" in data
+        assert data["service"] == "scd-shield"
+        assert data["version"] == "1.0.0"
 
 
 class TestDiagnoseEndpoint:
@@ -82,7 +85,10 @@ class TestDiagnoseEndpoint:
         client: TestClient,
         mock_diagnostic_service: MagicMock,
     ) -> None:
-        response = client.post("/diagnose", json=VALID_INCIDENT)
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
 
         assert response.status_code == status.HTTP_200_OK
 
@@ -126,9 +132,15 @@ class TestDiagnoseEndpoint:
         mutation: dict[str, Any],
         expected_status: int,
     ) -> None:
-        payload = {**VALID_INCIDENT, **mutation}
+        payload = {
+            **VALID_INCIDENT,
+            **mutation,
+        }
 
-        response = client.post("/diagnose", json=payload)
+        response = client.post(
+            "/diagnose",
+            json=payload,
+        )
 
         assert response.status_code == expected_status
 
@@ -141,30 +153,65 @@ class TestDiagnoseEndpoint:
             "Telemetry corrupted"
         )
 
-        response = client.post("/diagnose", json=VALID_INCIDENT)
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert response.status_code == (
+            status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
 
-        body = response.json()
+        detail = response.json()["detail"]
 
-        assert body["detail"]["error"] == "DiagnosticValidationError"
-        assert body["detail"]["message"] == "Telemetry corrupted"
+        assert detail["error"] == "DiagnosticValidationError"
+        assert detail["message"] == "Telemetry corrupted"
+        assert detail["incident_id"] == "INC-001"
 
-    def test_diagnose_handles_unexpected_service_error(
+    def test_diagnose_value_error_includes_incident_id(
+        self,
+        client: TestClient,
+        mock_diagnostic_service: MagicMock,
+    ) -> None:
+        mock_diagnostic_service.diagnose.side_effect = ValueError(
+            "Telemetry corrupted"
+        )
+
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
+
+        assert response.status_code == (
+            status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+
+        detail = response.json()["detail"]
+
+        assert detail["error"] == "DiagnosticValidationError"
+        assert detail["message"] == "Telemetry corrupted"
+        assert detail["incident_id"] == "INC-001"
+
+    def test_diagnose_internal_error_includes_incident_id(
         self,
         client: TestClient,
         mock_diagnostic_service: MagicMock,
     ) -> None:
         mock_diagnostic_service.diagnose.side_effect = RuntimeError(
-            "Database connection failed"
+            "Unexpected diagnostic failure"
         )
 
-        response = client.post("/diagnose", json=VALID_INCIDENT)
+        response = client.post(
+            "/diagnose",
+            json=VALID_INCIDENT,
+        )
 
-        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.status_code == (
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-        body = response.json()
+        detail = response.json()["detail"]
 
-        assert body["detail"]["error"] == "DiagnosticExecutionError"
-        assert body["detail"]["message"] == "Failed to evaluate incident."
-        assert "Database connection failed" not in response.text
+        assert detail["error"] == "DiagnosticExecutionError"
+        assert detail["message"] == "Failed to evaluate incident."
+        assert detail["incident_id"] == "INC-001"

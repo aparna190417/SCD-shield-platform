@@ -3,11 +3,22 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from shield.config.settings import Settings, get_settings
 from shield.ingress.diagnostic_service import DiagnosticService
 from shield.ingress.llm_factory import create_llm_adapter
 from shield.ingress.schemas import DiagnosticResult, Incident
+
+
+class APIErrorResponse(BaseModel):
+    """Structured API error response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    error: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    incident_id: str | None = None
 
 
 class ServiceContainer:
@@ -35,10 +46,7 @@ def get_diagnostic_service() -> DiagnosticService:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown."""
 
-    # Startup
     yield
-
-    # Shutdown
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -103,10 +111,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status.HTTP_422_UNPROCESSABLE_CONTENT: {
                 "description": (
                     "Validation or parser failure in diagnostic pipeline"
-                )
+                ),
+                "model": APIErrorResponse,
             },
             status.HTTP_500_INTERNAL_SERVER_ERROR: {
-                "description": "Internal diagnostic engine failure"
+                "description": "Internal diagnostic engine failure",
+                "model": APIErrorResponse,
             },
         },
     )
@@ -126,6 +136,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail={
                     "error": "DiagnosticValidationError",
                     "message": str(exc),
+                    "incident_id": incident.incident_id,
                 },
             ) from exc
 
@@ -135,6 +146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail={
                     "error": "DiagnosticExecutionError",
                     "message": "Failed to evaluate incident.",
+                    "incident_id": incident.incident_id,
                 },
             ) from exc
 
