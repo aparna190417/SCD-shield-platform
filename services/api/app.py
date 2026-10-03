@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from shield.config.logging import configure_logging_from_settings
 from shield.config.settings import Settings, get_settings
+from shield.context.builder import IncidentContextBuilder
 from shield.ingress.diagnostic_service import DiagnosticService
 from shield.ingress.llm_factory import create_llm_adapter
 from shield.ingress.schemas import DiagnosticResult, Incident
@@ -61,14 +62,18 @@ class ServiceContainer:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+
         self.adapter = create_llm_adapter(self.settings)
 
         self.diagnostic_service = DiagnosticService(
-            llm_adapter=self.adapter
+            llm_adapter=self.adapter,
         )
 
+        self.context_builder = IncidentContextBuilder()
+
         self.orchestrator = DiagnosticOrchestrator(
-            self.diagnostic_service
+            self.diagnostic_service,
+            context_builder=self.context_builder.build,
         )
 
 
