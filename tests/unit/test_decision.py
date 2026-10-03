@@ -111,3 +111,116 @@ def test_invalid_thresholds_are_rejected(
 ) -> None:
     with pytest.raises(ValueError):
         DecisionEngine(**kwargs)
+
+def test_critical_cptp_rejects_even_with_high_confidence() -> None:
+    engine = DecisionEngine()
+
+    incident = Incident(
+        incident_id="INC-CPTP-CRITICAL",
+        timestamp="2026-09-26T12:00:00Z",
+        node_id="node-a",
+        incident_type="hardware",
+        severity="critical",
+        description="Critical thermal condition",
+        telemetry={
+            "temperature": 95,
+            "temperature_limit": 100,
+            "power_w": 300,
+            "power_limit_w": 500,
+        },
+        metadata={},
+    )
+
+    diagnostic = DiagnosticResult(
+        incident_id="INC-CPTP-CRITICAL",
+        failure_family="thermal",
+        affected_entity="node-a",
+        primary_hypothesis="Thermal overload",
+        alternative_hypotheses=[],
+        supporting_evidence=["temperature=95"],
+        contradicting_evidence=[],
+        missing_evidence=[],
+        confidence=0.99,
+        recommended_action="Reduce workload",
+    )
+
+    decision = engine.evaluate(incident, diagnostic)
+
+    assert decision.status == DecisionStatus.REJECT
+    assert "CPTP" in decision.reason
+
+
+def test_warning_cptp_requires_review() -> None:
+    engine = DecisionEngine()
+
+    incident = Incident(
+        incident_id="INC-CPTP-WARNING",
+        timestamp="2026-09-26T12:00:00Z",
+        node_id="node-a",
+        incident_type="hardware",
+        severity="high",
+        description="Thermal warning",
+        telemetry={
+            "temperature": 80,
+            "temperature_limit": 100,
+            "power_w": 300,
+            "power_limit_w": 500,
+        },
+        metadata={},
+    )
+
+    diagnostic = DiagnosticResult(
+        incident_id="INC-CPTP-WARNING",
+        failure_family="thermal",
+        affected_entity="node-a",
+        primary_hypothesis="Thermal pressure",
+        alternative_hypotheses=[],
+        supporting_evidence=["temperature=80"],
+        contradicting_evidence=[],
+        missing_evidence=[],
+        confidence=0.99,
+        recommended_action="Reduce workload",
+    )
+
+    decision = engine.evaluate(incident, diagnostic)
+
+    assert decision.status == DecisionStatus.REVIEW
+    assert "CPTP" in decision.reason
+
+
+def test_normal_cptp_allows_high_confidence_approval() -> None:
+    engine = DecisionEngine()
+
+    incident = Incident(
+        incident_id="INC-CPTP-NORMAL",
+        timestamp="2026-09-26T12:00:00Z",
+        node_id="node-a",
+        incident_type="hardware",
+        severity="high",
+        description="Normal operating conditions",
+        telemetry={
+            "temperature": 50,
+            "temperature_limit": 100,
+            "power_w": 200,
+            "power_limit_w": 500,
+        },
+        metadata={},
+    )
+
+    diagnostic = DiagnosticResult(
+        incident_id="INC-CPTP-NORMAL",
+        failure_family="interconnect",
+        affected_entity="node-a",
+        primary_hypothesis="NVLink degradation",
+        alternative_hypotheses=[],
+        supporting_evidence=["link_errors=42"],
+        contradicting_evidence=[],
+        missing_evidence=[],
+        confidence=0.95,
+        recommended_action="Collect NVLink health counters",
+    )
+
+    decision = engine.evaluate(incident, diagnostic)
+
+    assert decision.status == DecisionStatus.APPROVE
+    assert decision.confidence == 0.95
