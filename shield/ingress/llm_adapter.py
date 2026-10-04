@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -27,7 +28,31 @@ class FakeLLMAdapter:
         self.requests: list[LLMRequest] = []
 
     def generate(self, request: LLMRequest) -> str:
-        """Return the configured response and record the request."""
+        """Return a deterministic response matching the incident ID."""
 
         self.requests.append(request)
-        return self.response
+
+        incident_id = self._extract_incident_id(request)
+
+        if incident_id is None:
+            return self.response
+
+        return self.response.replace(
+            '"incident_id": "INC-001"',
+            f'"incident_id": "{incident_id}"',
+            1,
+        )
+
+    @staticmethod
+    def _extract_incident_id(request: LLMRequest) -> str | None:
+        """Extract incident ID from the rendered user prompt."""
+
+        match = re.search(
+            r'"incident_id"\s*:\s*"([^"]+)"',
+            request.prompt.user,
+        )
+
+        if match:
+            return match.group(1)
+
+        return None
